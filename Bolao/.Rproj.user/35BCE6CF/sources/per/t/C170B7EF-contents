@@ -1,0 +1,977 @@
+library(shiny)
+library(shinydashboard)
+library(DT)
+library(shinyjs)
+library(sodium)
+library(gmailr)
+library(tableHTML)
+library(tidyverse)
+library(rvest)
+library(rclipboard)
+library(lubridate)
+library(plotly)
+library(readxl)
+
+
+# Setup para envio de e-mail ----------------------------------------------
+gm_auth_configure(key = "324060675307-l9emjplcbti55k4rt9r0cp8olt9eao73.apps.googleusercontent.com",
+                  secret = "Zz8Vf2V-0EOVwZIv2O7qyovU")
+
+options(
+  gargle_oauth_cache = ".secret",
+  gargle_oauth_email = "bolao.brasileirao.ie@gmail.com"
+)
+gm_auth(email = "bolao.brasileirao.ie@gmail.com")
+
+
+# Detectar rodada ---------------------------------------------------------
+jogos <- readRDS('./insumos/jogos.RDS')
+confrontos <- readRDS('./insumos/confrontos.RDS')
+rodada_atual <- min(jogos %>%
+                      filter(valido == 1,
+                             end > Sys.time()  %>%
+                               as.POSIXct(tz = "America/Sao_Paulo")) %>%
+                      select(Rodada) %>%
+                      pull())
+
+
+jogos_atual <- jogos[jogos$Rodada==rodada_atual,]
+jogos_atual <- jogos_atual %>%
+  arrange(data)
+
+
+confrontos_atual <- confrontos %>%
+  filter(rodada == rodada_atual) %>%
+  mutate(confronto = paste(jogador_a,'x',jogador_b))
+
+confrontos_hist <- read_excel('./insumos/Painel_Confrontos_Integrado.xlsx')
+
+confrontos_hist$Cravadas_Op <- apply(confrontos_hist,1, function(x){
+  confrontos_hist %>%
+    filter(Jogador == x['Oponente'],
+           Oponente == x['Jogador'],
+           Edicao == x['Edicao'],
+           Rodada == x['Rodada']) %>%
+    select(Cravadas) %>%
+    pull()
+})
+
+andamento <- between(Sys.time()  %>%
+                       as.POSIXct(tz = "America/Sao_Paulo"),
+                     first(jogos_atual$start) %>%
+                       as.POSIXct(tz = "America/Sao_Paulo"),
+                     first(jogos_atual$end)  %>%
+                       as.POSIXct(tz = "America/Sao_Paulo"))
+
+
+source('classificacao.R')
+source('graficos.R')
+
+if (andamento){
+  source('parciais.R')
+}
+
+
+
+# Página de login ---------------------------------------------------------
+loginpage <- div(id = "loginpage", style = "width: 500px; max-width: 100%; margin: 0 auto; padding: 20px;",
+                 wellPanel(
+                   tags$h2("LOG IN", class = "text-center", style = "padding-top: 0;color:#333; font-weight:600;"),
+                   textInput("userName", placeholder="Nome de Usuário", label = tagList(icon("user"), "Nome de Usuário")),
+                   passwordInput("passwd", placeholder="Senha", label = tagList(icon("unlock-alt"), "Senha")),
+                   br(),
+                   div(
+                     style = "text-align: center;",
+                     actionButton("login", "SIGN IN", style = "color: white; background-color:#3c8dbc;
+                                 padding: 10px 15px; width: 150px; cursor: pointer;
+                                 font-size: 18px; font-weight: 600;"),
+                     shinyjs::hidden(
+                       div(id = "nomatch",
+                           tags$p("Errou, seu babaca!",
+                                  style = "color: red; font-weight: 600; 
+                                            padding-top: 5px;font-size:16px;", 
+                                  class = "text-center"))),
+                     br(),
+                     br(),
+                     br()
+                   )))
+
+
+# Palpites ------------------------------------------------------
+palpite_page <- div(id = 'palpitepage', style = 'padding: 10px;',
+                    
+                    # Texto inicial
+                    fluidRow(helpText(paste0("Insira seus palpites e aperte 'Enviar' no final."))),
+                    
+                    # Confronto 1
+                    fluidRow(p(paste0(jogos_atual[1,"dia_semana"],' - ',
+                                      jogos_atual[1,"hora"],': ',
+                                      jogos_atual[1,"mandante"], ' x ',
+                                      jogos_atual[1,"visitante"]),
+                                      strong(ifelse(pull(jogos_atual[1,"valido"])==0,' - JOGO INVÁLIDO',''))
+                                        ),
+                      column(3,numericInput('time_1m', jogos_atual[1,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_1v', jogos_atual[1,"visitante"], value = 0, min = 0))
+                      ),
+                    
+                    # Confronto 2
+                    fluidRow(p(paste0(jogos_atual[2,"dia_semana"],' - ',
+                                      jogos_atual[2,"hora"],': ',
+                                      jogos_atual[2,"mandante"], ' x ',
+                                      jogos_atual[2,"visitante"]),
+                               strong(ifelse(pull(jogos_atual[2,"valido"])==0,' - JOGO INVÁLIDO',''))
+                    ),
+                      column(3,numericInput('time_2m', jogos_atual[2,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_2v', jogos_atual[2,"visitante"], value = 0, min = 0))
+                      ),
+                    
+                    fluidRow(p(paste0(jogos_atual[3,"dia_semana"],' - ',
+                                      jogos_atual[3,"hora"],': ',
+                                      jogos_atual[3,"mandante"], ' x ',
+                                      jogos_atual[3,"visitante"]),
+                                      strong(ifelse(pull(jogos_atual[3,"valido"])==0,' - JOGO INVÁLIDO',''))
+                    ),
+                      column(3,numericInput('time_3m', jogos_atual[3,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_3v', jogos_atual[3,"visitante"], value = 0, min = 0))
+                    ),
+                    fluidRow(p(paste0(jogos_atual[4,"dia_semana"],' - ',
+                                      jogos_atual[4,"hora"],': ',
+                                      jogos_atual[4,"mandante"], ' x ',
+                                      jogos_atual[4,"visitante"]),
+                               strong(ifelse(pull(jogos_atual[4,"valido"])==0,' - JOGO INVÁLIDO',''))
+                    ),
+                      column(3,numericInput('time_4m', jogos_atual[4,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_4v', jogos_atual[4,"visitante"], value = 0, min = 0))
+                    ),
+                    fluidRow(p(paste0(jogos_atual[5,"dia_semana"],' - ',
+                                      jogos_atual[5,"hora"],': ',
+                                      jogos_atual[5,"mandante"], ' x ',
+                                      jogos_atual[5,"visitante"]),
+                                      strong(ifelse(pull(jogos_atual[5,"valido"])==0,' - JOGO INVÁLIDO',''))
+                    ),
+                      column(3,numericInput('time_5m', jogos_atual[5,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_5v', jogos_atual[5,"visitante"], value = 0, min = 0))
+                    ),
+                    fluidRow(p(paste0(jogos_atual[6,"dia_semana"],' - ',
+                                      jogos_atual[6,"hora"],': ',
+                                      jogos_atual[6,"mandante"], ' x ',
+                                      jogos_atual[6,"visitante"]),
+                                      strong(ifelse(pull(jogos_atual[6,"valido"])==0,' - JOGO INVÁLIDO',''))
+                    ),
+                      column(3,numericInput('time_6m', jogos_atual[6,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_6v', jogos_atual[6,"visitante"], value = 0, min = 0))
+                    ),
+                    fluidRow(p(paste0(' ',jogos_atual[7,"dia_semana"],' - ',
+                                      jogos_atual[7,"hora"],': ',
+                                      jogos_atual[7,"mandante"], ' x ',
+                                      jogos_atual[7,"visitante"]),
+                               strong(ifelse(pull(jogos_atual[7,"valido"])==0,' - JOGO INVÁLIDO',''))
+                    ),
+                      column(3,numericInput('time_7m', jogos_atual[7,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_7v', jogos_atual[7,"visitante"], value = 0, min = 0))
+                    ),
+                    fluidRow(p(paste0(jogos_atual[8,"dia_semana"],' - ',
+                                      jogos_atual[8,"hora"],': ',
+                                      jogos_atual[8,"mandante"], ' x ',
+                                      jogos_atual[8,"visitante"]),
+                                      strong(ifelse(pull(jogos_atual[8,"valido"])==0,' - JOGO INVÁLIDO',''))
+                    ),
+                      column(3,numericInput('time_8m', jogos_atual[8,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_8v', jogos_atual[8,"visitante"], value = 0, min = 0))
+                    ),
+                    fluidRow(p(paste0(jogos_atual[9,"dia_semana"],' - ',
+                                      jogos_atual[9,"hora"],': ',
+                                      jogos_atual[9,"mandante"], ' x ',
+                                      jogos_atual[9,"visitante"]),
+                               strong(ifelse(pull(jogos_atual[9,"valido"])==0,' - JOGO INVÁLIDO',''))
+                    ),
+                      column(3,numericInput('time_9m', jogos_atual[9,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_9v', jogos_atual[9,"visitante"], value = 0, min = 0))
+                    ),
+                    fluidRow(p(paste0(jogos_atual[10,"dia_semana"],' - ',
+                                      jogos_atual[10,"hora"],': ',
+                                      jogos_atual[10,"mandante"], ' x ',
+                                      jogos_atual[10,"visitante"]),
+                               strong(ifelse(pull(jogos_atual[10,"valido"])==0,' - JOGO INVÁLIDO',''))
+                    ),
+                      column(3,numericInput('time_10m', jogos_atual[10,"mandante"], value = 0, min = 0)),
+                      column(3,numericInput('time_10v', jogos_atual[10,"visitante"], value = 0, min = 0))
+                    ),
+                    
+                    # Botão Enviar
+                    fluidRow(
+                      div(
+                        style = "text-align: center;",
+                        actionButton("goButton", "Enviar", style = "color: white; background-color:#3c8dbc;
+                                 padding: 10px 15px; width: 150px; cursor: pointer;
+                                 font-size: 18px; font-weight: 600;"),
+                        shinyjs::hidden(
+                          div(id = "enviado",
+                              tags$p("Palpite enviado! Obrigado por fazer nada mais do que sua obrigação.",
+                                     style = "color: red; font-weight: 600; 
+                                            padding-top: 5px;font-size:16px;", 
+                                     class = "text-center")))
+                        )                    ))
+
+
+# Confrontos --------------------------------------------------------------
+rodadas_confronto <- c(1:26)
+
+names(rodadas_confronto) <- paste('Rodada',1:26)
+
+confrontos_page <- div(id = 'confrontos_page',
+                       selectInput("rodadas_confronto", "Rodadas:",
+                                   rodadas_confronto, selected = rodada_atual-1),
+                       uiOutput("rodadas_confronto"))
+
+# Palpites enviados -------------------------------------------------------
+palpites_enviados <- div(id = 'palpites_enviados',
+                         fluidRow(p('Rodada atual:'),
+                                  renderTable('msg'))
+                         )
+
+
+# Resultados reais --------------------------------------------------------
+rodada_br <- 2:38
+names(rodada_br) <- paste0('Rodada ', rodada_br)
+
+result_reais <- div(id = 'result_real',
+                    selectInput("rodada_br_esc", "Rodadas do Campeonato:",
+                                rodada_br),
+                    uiOutput("result_real_show"))
+
+
+# Página de andamento -----------------------------------------------------
+choices <- c('1',
+             '2',
+             '3',
+             '4',
+             '5',
+             '6',
+             '7')
+
+names(choices) <-c(confrontos_atual$confronto[1],
+                   confrontos_atual$confronto[2],
+                   confrontos_atual$confronto[3],
+                   confrontos_atual$confronto[4],
+                   confrontos_atual$confronto[5],
+                   confrontos_atual$confronto[6],
+                   confrontos_atual$confronto[7])
+
+andamento_page <- div(id = 'em_andamento', align = "left",
+                      selectInput("confronto", "Confronto:",
+                                  choices),
+                      uiOutput("confronto"),
+                      p(),
+                      rclipboardSetup(),
+                      uiOutput('clip_button_confronto'))
+                      
+
+# Página com dados de login -----------------------------------------------
+credentials <- readr::read_csv('./insumos/credentials.csv')
+
+credentials = data.frame(
+  username_id = credentials$username_id,
+  passod   = sapply(credentials$passod,password_store),
+  permission  = "basic",
+  nome = credentials$nome, 
+  stringsAsFactors = F
+)
+
+credentials[credentials$username_id=='placar_real',"permission"] <- 'advanced'
+
+# Página de classificação -------------------------------------------------
+class_list <- list(classificacao,
+                   classificacao_1t,
+                   classificacao_2t,
+                   pontos_pro,
+                   cravadas,
+                   campeao_artilheiro,
+                   sequencia)
+
+class_vec <- 1:length(class_list)
+names(class_vec) <- c('Geral',
+                      '1º turno',
+                      '2º turno',
+                      'Pontos Pró',
+                      'Cravadas',
+                      'Bônus',
+                      'Sequência')
+
+classificacao_page <- div(id = 'em_andamento', align = "left",
+                          selectInput("class_item", "Tabela:",
+                                      class_vec),
+                          uiOutput("classificacao"))
+
+
+# Regulamento -------------------------------------------------------------
+regulamento_pdf <- div(id = 'regulamento',
+                       tags$iframe(style="height:400px; width:100%; scrolling=yes", 
+                               src="regulamento_2020.pdf"))
+
+# Página Parciais -------------------------------------------------------------------------
+tipo <- c('consolidadas',
+          'andamento')
+
+names(tipo) <- c('Consolidada',
+                 'Em andamento')
+
+parciais_page <- div(id = 'parciais_page', align = "left",
+                     p(strong('Resultados considerados:')),
+                     uiOutput('resultados_ge'),
+                     selectInput("parciais_tipo", "Parciais:",
+                                 tipo),
+                     uiOutput("parciais"),
+                     p(),
+                     rclipboardSetup(),
+                     uiOutput('clip_button_parciais'))
+
+# Gráficos ----------------------------------------------------------------
+graph_list<-list(cravadas_jogador,
+                 cravadas_time,
+                 pontos_jogador,
+                 pontos_time,
+                 maior_pontuador_por_time,
+                 maior_time_por_jogador,
+                 evolucao_pontos,
+                 trajetoria_1t)
+
+graph <- 1:length(graph_list)
+
+names(graph)<-c('Cravadas por jogador',
+                'Cravadas por time',
+                'Pontos por jogador',
+                'Pontos por time',
+                'Maiores pontuadores de cada time',
+                'Time que mais contribui para cada jogador',
+                'Evolução de pontos',
+                'Trajetória no primeiro turno')
+
+graph_page <- div(id = 'graph_page', align = "left",
+                  selectInput("graph_tipo", "Gráfico:",
+                              graph),
+                  plotlyOutput("grafico"))
+
+# Página de palpites enviados ---------------------------------------------
+gm_threads(paste0('"Rodada ', rodada_atual,'"')) %>%
+  gm_id() %>%
+  lapply(function(x){
+    bind_cols(subject = x %>%
+                gm_message() %>%
+                gm_subject(),
+              data = x %>%
+                gm_message() %>%
+                gm_date() %>%
+                lubridate::dmy_hms(quiet = T,
+                                   tz = "America/Sao_Paulo"),
+              body = x %>%
+                gm_message() %>%
+                gm_body() %>%
+                .[[1]])  
+  }) -> enviados
+  
+if(identical(enviados,list())){
+  confrontos %>%
+    filter(rodada == rodada_atual) %>%
+    select(-rodada_bolao)%>%
+    gather(key=jjj,value = jogador, -rodada) %>%
+    select(-jjj) %>%
+    mutate(Enviou = 'Não') %>%
+    arrange(jogador) %>%
+    select(jogador,
+           Enviou) %>%
+    rename(Jogador = jogador) -> enviados
+} else {
+  enviados %>%
+    Reduce(f=rbind) %>%
+    filter(str_detect(subject,paste0('Rodada ', rodada_atual)),
+           data <= first(jogos_atual$start) %>%
+             as.POSIXct(tz = "America/Sao_Paulo")) %>%
+    separate(subject, c('jogador','rodada'), ' - Rodada ') %>%
+    mutate(jogador = trimws(jogador)) %>%
+    group_by(jogador) %>%
+    top_n(1, wt = data) %>%
+    filter(!duplicated(jogador),
+           jogador != 'Placar Real') %>%
+    ungroup() %>%
+    mutate(rodada = as.numeric(rodada)) %>%
+    right_join(confrontos %>%
+                 filter(rodada == rodada_atual) %>%
+                 select(-rodada_bolao)%>%
+                 gather(key=jjj,value = jogador, -rodada) %>%
+                 select(-jjj),
+               by = c('jogador', 'rodada')) %>%
+    mutate(Enviou = ifelse(!is.na(body),'Sim','Não')) %>%
+    arrange(jogador) %>%
+    select(jogador,
+           Enviou) %>%
+    rename(Jogador = jogador) -> enviados
+}
+
+enviados_page <- div(id = 'enviados_page', align = "left",
+                     uiOutput('palpites_enviados'))
+
+# Historico de confrontos -------------------------------------------------
+jog_hist <- unique(confrontos_hist$Jogador)[order(unique(confrontos_hist$Jogador))]
+
+hist_page <- div(id = 'hist_page', align = "left",
+    selectInput("jog_hist_a", "Jogador 1:",
+                jog_hist),
+    selectInput("jog_hist_b", "Jogador 2:",
+                jog_hist),
+    uiOutput("historico_confronto"))
+
+# Header do app -----------------------------------------------------------
+header <- dashboardHeader( title = "Menu", uiOutput("logoutbtn"))
+
+sidebar <- dashboardSidebar(uiOutput("sidebarpanel")) 
+# body <- dashboardBody(shinyjs::useShinyjs(), uiOutput("body"))
+
+body <- dashboardBody(div(id='homepage',
+                          p('Bem vindo a página inicial do Bolão do Campeonato Brasileiro - Edição 2020'),
+                          p('Navegue através do menu ao lado.')),
+                      tabItems(
+                        tabItem('regulamento',
+                                regulamento_pdf),
+                        tabItem(tabName = 'palpites',
+                                shinyjs::useShinyjs(),
+                                uiOutput('body')),
+                        tabItem(tabName = 'confrontos',
+                                confrontos_page),
+                        tabItem(tabName = 'palp_ant',
+                                uiOutput('palp_ant')),
+                        tabItem(tabName = 'classificacao',
+                                classificacao_page),
+                        tabItem(tabName = 'parciais',
+                                parciais_page),
+                        tabItem(tabName = 'graficos',
+                                graph_page),
+                        tabItem(tabName = 'enviados',
+                                enviados_page),
+                        tabItem(tabName = 'historico',
+                                hist_page)))
+
+ui<-dashboardPage(title = 'Bolão do Brasileirão - 2020',
+                  header, sidebar, body, skin = "blue")
+
+
+# Server ------------------------------------------------------------------
+server <- function(input, output, session) {
+  login = FALSE
+  USER <- reactiveValues(login = login)
+
+# Botão de copiar palpites ------------------------------------------------
+  output$clip_button_confronto <- renderUI({
+    rclipButton(inputId = "clipbtn",
+                label = "Copiar",
+                clipText = HTML(readLines(paste0('./insumos/confronto_',input$confronto,'.html'))) %>%
+                  str_replace_all('<br/>', '\n') %>%
+                  str_remove_all('<b>') %>%
+                  str_remove_all('</b>'),
+                icon = icon("clipboard"), modal = T, width = '150%')
+  })
+  
+# Botão de copiar parciais ------------------------------------------------
+  output$clip_button_parciais <- renderUI({
+    rclipButton(inputId = "clipbtn_parciais",
+                label = "Copiar",
+                clipText = HTML(readLines(paste0('./insumos/parciais_',input$parciais_tipo,'.html'))) %>%
+                  str_replace_all('<br/>', '\n') %>%
+                  str_remove_all('<b>') %>%
+                  str_remove_all('</b>'),
+                icon = icon("clipboard"), modal = T, width = '150%')
+  })
+  
+  
+# Login -------------------------------------------------------------------
+  observe({ 
+    if (USER$login == FALSE) {
+      if (!is.null(input$login)) {
+        if (input$login > 0) {
+          Username <- isolate(input$userName)
+          Password <- isolate(input$passwd)
+          if(length(which(credentials$username_id==Username))==1) { 
+            pasmatch  <- credentials["passod"][which(credentials$username_id==Username),]
+            pasverify <- password_verify(pasmatch, Password)
+            if(pasverify) {
+              USER$login <- TRUE
+            } else {
+              shinyjs::toggle(id = "nomatch", anim = TRUE, time = 1, animType = "fade")
+              shinyjs::delay(3000, shinyjs::toggle(id = "nomatch", anim = TRUE, time = 1, animType = "fade"))
+            }
+          } else {
+            shinyjs::toggle(id = "nomatch", anim = TRUE, time = 1, animType = "fade")
+            shinyjs::delay(3000, shinyjs::toggle(id = "nomatch", anim = TRUE, time = 1, animType = "fade"))
+          }
+        } 
+      }
+    }    
+  })
+  
+
+
+# Palpites enviados --------------------------------------------------------
+output$palpites_enviados <- render_tableHTML(tableHTML(enviados,
+                                                       collapse = 'separate_shiny',
+                                                       spacing = '2px', rownames = FALSE) %>%
+                                               add_theme('rshiny-blue') %>%
+                                               add_css_conditional_column(conditional = '==',
+                                                                          value = 'Sim',
+                                                                          css = list("font-weight","bold"),
+                                                                          columns = 2))
+  
+
+# Página de confrontos ----------------------------------------------------
+output$confronto <- reactive({HTML(readLines(paste0('./insumos/confronto_',input$confronto,'.html')))})
+
+
+# Rodadas - página --------------------------------------------------------
+output$rodadas_confronto <- reactive({HTML(readLines(paste0('./insumos/confrontos/confronto_',input$rodadas_confronto,'.html')))})
+
+
+# Resultados Globo Esporte ------------------------------------------------
+output$resultados_ge <- render_tableHTML(tableHTML(resultados %>%
+                               mutate(label = case_when(label == 'veja como foi' ~ 'Consolidado',
+                                                        label == 'acompanhe em tempo real' ~ 'Em andamento')) %>%
+                                 select(-vencedor) %>%
+                                 select(mandante,
+                                        mandante_placar,
+                                        visitante_placar,
+                                        visitante,
+                                        label) %>%
+                                 setNames(c('Mandante',
+                                          'Gols (M)',
+                                          'Gols (V)',
+                                          'Visitante',
+                                          'Status')),
+                             collapse = 'separate_shiny',
+                             spacing = '2px', rownames = FALSE) %>%
+                     add_theme('rshiny-blue'))
+  
+# Envio de resultados reais -------------------------------------------------
+  output$result_real_show <- render_tableHTML({
+    div(
+          # Texto inicial
+          fluidRow(helpText(paste0("Insira seus palpites e aperte 'Enviar' no final."))),
+          
+          # Confronto 1
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][1,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][1,"visitante"])),
+                   column(3,numericInput('time_1m', jogos[jogos$Rodada==input$rodada_br_esc,][1,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_1v', jogos[jogos$Rodada==input$rodada_br_esc,][1,"visitante"], value = 0, min = 0))
+          ),
+          
+          # Confronto 2
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][2,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][2,"visitante"])),
+                   column(3,numericInput('time_2m', jogos[jogos$Rodada==input$rodada_br_esc,][2,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_2v', jogos[jogos$Rodada==input$rodada_br_esc,][2,"visitante"], value = 0, min = 0))
+          ),
+          
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][3,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][3,"visitante"])),
+                   column(3,numericInput('time_3m', jogos[jogos$Rodada==input$rodada_br_esc,][3,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_3v', jogos[jogos$Rodada==input$rodada_br_esc,][3,"visitante"], value = 0, min = 0))
+          ),
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][4,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][4,"visitante"])),
+                   column(3,numericInput('time_4m', jogos[jogos$Rodada==input$rodada_br_esc,][4,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_4v', jogos[jogos$Rodada==input$rodada_br_esc,][4,"visitante"], value = 0, min = 0))
+          ),
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][5,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][5,"visitante"])),
+                   column(3,numericInput('time_5m', jogos[jogos$Rodada==input$rodada_br_esc,][5,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_5v', jogos[jogos$Rodada==input$rodada_br_esc,][5,"visitante"], value = 0, min = 0))
+          ),
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][6,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][6,"visitante"])),
+                   column(3,numericInput('time_6m', jogos[jogos$Rodada==input$rodada_br_esc,][6,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_6v', jogos[jogos$Rodada==input$rodada_br_esc,][6,"visitante"], value = 0, min = 0))
+          ),
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][7,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][7,"visitante"])),
+                   column(3,numericInput('time_7m', jogos[jogos$Rodada==input$rodada_br_esc,][7,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_7v', jogos[jogos$Rodada==input$rodada_br_esc,][7,"visitante"], value = 0, min = 0))
+          ),
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][8,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][8,"visitante"])),
+                   column(3,numericInput('time_8m', jogos[jogos$Rodada==input$rodada_br_esc,][8,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_8v', jogos[jogos$Rodada==input$rodada_br_esc,][8,"visitante"], value = 0, min = 0))
+          ),
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][9,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][9,"visitante"])),
+                   column(3,numericInput('time_9m', jogos[jogos$Rodada==input$rodada_br_esc,][9,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_9v', jogos[jogos$Rodada==input$rodada_br_esc,][9,"visitante"], value = 0, min = 0))
+          ),
+          fluidRow(p(paste0(' ', jogos[jogos$Rodada==input$rodada_br_esc,][10,"mandante"], ' x ', jogos[jogos$Rodada==input$rodada_br_esc,][10,"visitante"])),
+                   column(3,numericInput('time_10m', jogos[jogos$Rodada==input$rodada_br_esc,][10,"mandante"], value = 0, min = 0)),
+                   column(3,numericInput('time_10v', jogos[jogos$Rodada==input$rodada_br_esc,][10,"visitante"], value = 0, min = 0))
+          ),
+          
+          # Botão Enviar
+          fluidRow(
+            div(
+              style = "text-align: center;",
+              actionButton("goButton_real", "Enviar", style = "color: white; background-color:#3c8dbc;
+                                 padding: 10px 15px; width: 150px; cursor: pointer;
+                                 font-size: 18px; font-weight: 600;"),
+              shinyjs::hidden(
+                div(id = "enviado",
+                    tags$p("Palpite enviado! Obrigado por fazer nada mais do que sua obrigação.",
+                           style = "color: red; font-weight: 600; 
+                                            padding-top: 5px;font-size:16px;", 
+                           class = "text-center")))
+              )
+            ))
+    })
+  
+  
+
+# Logout ------------------------------------------------------------------
+  output$logoutbtn <- renderUI({
+    req(USER$login)
+    tags$li(a(icon("fa fa-sign-out"), "Logout", 
+              href="javascript:window.location.reload(true)"),
+            class = "dropdown", 
+            style = "background-color: #eee !important; border: 0;
+                    font-weight: bold; margin:5px; padding: 10px;")
+  })
+
+# Palpite anterior --------------------------------------------------------
+output$palp_ant <- reactive({
+  req(USER$login)
+  {
+    # Compilar palpites -------------------------------------------------------
+    gm_threads(paste0('"Rodada ', rodada_atual,'"')) %>%
+      gm_id() %>%
+      lapply(function(x){
+        bind_cols(subject = x %>%
+                    gm_message() %>%
+                    gm_subject(),
+                  data = x %>%
+                    gm_message() %>%
+                    gm_date() %>%
+                    lubridate::dmy_hms(quiet = T,
+                                       tz = "America/Sao_Paulo"),
+                  body = x %>%
+                    gm_message() %>%
+                    gm_body() %>%
+                    .[[1]])  
+      }) %>%
+      Reduce(f=rbind) %>%
+      filter(str_detect(subject,paste0('Rodada ', rodada_atual))) %>%
+      separate(subject, c('jogador','rodada'), ' - Rodada ') %>%
+      filter(jogador == credentials[which(credentials$username_id == input$userName), 'nome']) %>%
+      group_by(jogador) %>%
+      top_n(1, wt = data) %>%
+      ungroup() %>%
+      mutate(rodada = as.numeric(rodada)) %>%
+      mutate(esqueceu = as.numeric(is.na(body))) -> df
+    
+    
+    jogos_a <- if(!identical(df$body, character(0))){
+      rvest::html_table(xml2::read_html(df$body))[[1]] %>%
+        rename(jogo = 1)
+    } else {
+      as.character('Não enviou ainda.')
+    }
+    
+    dias <- unique(jogos_atual %>%
+                     filter(valido == 1) %>%
+                     arrange(data) %>%
+                     .[, "dia_semana"] %>%
+                     pull())
+    
+    list <- c()
+    
+    if(jogos_a == 'Não enviou ainda.'){
+      list <- jogos_a
+    } else {
+      for (j in 1:length(dias)){
+        list[[j]] <- jogos_a %>%
+          left_join(jogos_atual,
+                    by = c('mandante', 'visitante')) %>%
+          filter(dia_semana == dias[j],
+                 valido == 1) %>%
+          arrange(data) %>%
+          apply(1,function(x){
+            paste(x['hora'],
+                  '-',
+                  x['mandante'],
+                  x['mandante_placar'],
+                  'x',
+                  x['visitante_placar'],
+                  x['visitante'])
+          }) %>%
+          paste0(., collapse = '<br/>\n') %>%
+          paste0('<b>*', dias[j],'*</b><br/>\n<br/>\n',.,'\n<br/>\n')}}
+    
+    palp_a <- paste0('<b>*',
+                     df$jogador,
+                     '*</b><br/>\n<br/>\n',
+                     paste(list, collapse = "<br/>\n"))
+    
+    writeLines(palp_a,
+               paste0('./insumos/palpite_atual_',credentials[which(credentials$username_id == input$userName), 'nome'],'.html'))    
+  }
+  
+  HTML(readLines(paste0('./insumos/palpite_atual_',credentials[which(credentials$username_id == input$userName), 'nome'],'.html')))
+  })
+  
+
+# Gráficos ----------------------------------------------------------------
+output$grafico<-renderPlotly(graph_list[[as.numeric(input$graph_tipo)]])
+
+# Parciais ----------------------------------------------------------------
+  output$parciais <- reactive({
+    
+    # if(andamento){
+    #   HTML(readLines(paste0('./insumos/parciais_',input$parciais_tipo,'.html')))
+    # } else {
+    #     'Nada para se ver aqui.'
+    #   }
+
+    if(TRUE){
+      HTML(readLines(paste0('./insumos/parciais_',input$parciais_tipo,'.html')))
+    } else {
+      'Nada para se ver aqui.'
+    }
+
+  })
+  
+# Sidebar -----------------------------------------------------------------
+  output$sidebarpanel <- renderUI({
+    if(USER$login == TRUE){
+      
+      sidebarMenu(
+        menuItem('Regulamento',
+                 tabName = 'regulamento',
+                 icon = icon("dashboard")),
+        menuItem("Palpites",
+                 tabName = "palpites",
+                 icon = icon("dashboard")),
+          menuItem("Confrontos",
+                   tabName = "confrontos",
+                   icon = icon("dashboard")),
+        menuItem('Palpite anterior',
+                 tabName = 'palp_ant',
+                 icon = icon("dashboard")),
+        menuItem('Classificação',
+                 tabName = 'classificacao',
+                 icon = icon("dashboard")),
+        menuItem('Parciais',
+                 tabName = 'parciais',
+                 icon = icon('dashboard')),
+        menuItem('Gráficos',
+                 tabName = 'graficos',
+                 icon = icon('dashboard')),
+        menuItem('Enviados',
+                 tabName = 'enviados',
+                 icon = icon('dashboard')),
+        menuItem('Histórico',
+                 tabName = 'historico',
+                 icon = icon('dashboard'))
+      ) } else {
+        sidebarMenu(
+          menuItem("Login",
+                   tabName = "palpites",
+                   icon = icon("dashboard")))
+        
+      }
+      
+      })
+
+
+# Body --------------------------------------------------------------------
+  output$body <- renderUI({
+
+    if (USER$login == TRUE) {
+      if (credentials[,"permission"][which(credentials$username_id==input$userName)]=="advanced") {
+        result_reais
+      } else {
+      if(!andamento){
+          palpite_page
+      } else {
+        source('comp_palp.R')
+        andamento_page
+      }}}
+    else {
+      loginpage
+    }
+  })
+
+
+# Classificação -----------------------------------------------------------
+output$classificacao <- render_tableHTML(tableHTML(class_list[[as.numeric(input$class_item)]] %>%
+                                           setNames(str_replace(names(.),
+                                                                '_',
+                                                                ' ')),
+                                         collapse = 'separate_shiny',
+                                         spacing = '2px') %>%
+                                           add_theme('rshiny-blue'))
+
+  
+# Botão de enviar ----------------------------------------------------------------
+  observe({
+    req(input$goButton)
+    
+    # Take a dependency on input$goButton
+    if (input$goButton == 0){
+      return(NULL)
+    } else {
+      # Use isolate() to avoid dependency on input$goButton
+      isolate({
+       msg <-tableHTML(tibble(mandante = c(jogos_atual[1,"mandante"],
+                       jogos_atual[2,"mandante"],
+                       jogos_atual[3,"mandante"],
+                       jogos_atual[4,"mandante"],
+                       jogos_atual[5,"mandante"],
+                       jogos_atual[6,"mandante"],
+                       jogos_atual[7,"mandante"],
+                       jogos_atual[8,"mandante"],
+                       jogos_atual[9,"mandante"],
+                       jogos_atual[10,"mandante"]),
+          mandante_placar = c(input$time_1m,
+                              input$time_2m,
+                              input$time_3m,
+                              input$time_4m,
+                              input$time_5m,
+                              input$time_6m,
+                              input$time_7m,
+                              input$time_8m,
+                              input$time_9m,
+                              input$time_10m),
+          visitante_placar = c(input$time_1v,
+                               input$time_2v,
+                               input$time_3v,
+                               input$time_4v,
+                               input$time_5v,
+                               input$time_6v,
+                               input$time_7v,
+                               input$time_8v,
+                               input$time_9v,
+                               input$time_10v),
+          visitante = c(jogos_atual[1,"visitante"],
+                        jogos_atual[2,"visitante"],
+                        jogos_atual[3,"visitante"],
+                        jogos_atual[4,"visitante"],
+                        jogos_atual[5,"visitante"],
+                        jogos_atual[6,"visitante"],
+                        jogos_atual[7,"visitante"],
+                        jogos_atual[8,"visitante"],
+                        jogos_atual[9,"visitante"],
+                        jogos_atual[10,"visitante"])))
+        
+        text_msg <- gm_mime() %>%
+          gm_to("bolao.brasileirao.ie@gmail.com") %>%
+          gm_from("bolao.brasileirao.ie@gmail.com") %>%
+          gm_text_body(msg) %>%
+          gm_subject(paste0(credentials[which(credentials$username_id == input$userName), 'nome'],' - Rodada ', rodada_atual))
+        
+        gm_send_message(text_msg)
+        
+        shinyjs::toggle(id = "enviado", anim = TRUE, time = 1, animType = "fade")
+        shinyjs::delay(3000, shinyjs::toggle(id = "enviado", anim = TRUE, time = 1, animType = "fade"))
+        
+        
+      })
+    }
+  })
+
+# Tabela de historico -----------------------------------------------------
+output$historico_confronto <- reactive({
+  confrontos_hist %>%
+    filter(Jogador %in% c(input$jog_hist_a,input$jog_hist_b),
+           Oponente %in% c(input$jog_hist_a,input$jog_hist_b)) %>%
+    group_by(Rodada,Edicao) %>%
+    sample_n(1, weight = c(1,0)) %>%
+    ungroup() %>%
+    mutate(rod_aux = as.numeric(str_remove_all(Rodada,
+                                               'Rodada '))) %>%
+    arrange(Edicao,
+            rod_aux) %>%
+    select(Edicao, everything()) %>%
+    apply(1, function(x){
+      paste0(x['Edicao'],' - ',x['Rodada'],' - ',
+             ifelse(x['Resultado'] == 'Vitória',
+                    paste0('<b>*',x['Jogador'],' [',x['Cravadas'],'] ',x['PontosPro'],'*</b>'),
+                    paste0(x['Jogador'],' [',x['Cravadas'],'] ',x['PontosPro'])),
+             ' x ',
+             ifelse(x['Resultado'] == 'Derrota',
+                    paste0('<b>*',x['PontosContra'],' [',x['Cravadas_Op'],'] ',x['Oponente'],'*</b>'),
+                    paste0(x['PontosContra'],' [',x['Cravadas_Op'],'] ',x['Oponente'])))
+    }) -> hist_confronto_tab
+  
+  if(identical(hist_confronto_tab,
+               character(0))){
+    hist_confronto_tab <- 'Sem confrontos'
+  }
+  
+  HTML(c('<b>Confrontos</b><br/>',paste0(hist_confronto_tab, collapse = '<br/>')))
+  
+  })
+    
+# Botão de enviar - resultados reais ----------------------------------------------------------------
+observe({
+  req(input$goButton_real)
+
+  # Take a dependency on input$goButton
+  if (input$goButton_real == 0){
+    return(NULL)
+  } else {
+    # Use isolate() to avoid dependency on input$goButton
+    isolate({
+      msg <-tableHTML(tibble(mandante = c(jogos[jogos$Rodada==input$rodada_br_esc,][1,"mandante"],
+                                          jogos[jogos$Rodada==input$rodada_br_esc,][2,"mandante"],
+                                          jogos[jogos$Rodada==input$rodada_br_esc,][3,"mandante"],
+                                          jogos[jogos$Rodada==input$rodada_br_esc,][4,"mandante"],
+                                          jogos[jogos$Rodada==input$rodada_br_esc,][5,"mandante"],
+                                          jogos[jogos$Rodada==input$rodada_br_esc,][6,"mandante"],
+                                          jogos[jogos$Rodada==input$rodada_br_esc,][7,"mandante"],
+                                          jogos[jogos$Rodada==input$rodada_br_esc,][8,"mandante"],
+                                          jogos[jogos$Rodada==input$rodada_br_esc,][9,"mandante"],
+                                          jogos[jogos$Rodada==input$rodada_br_esc,][10,"mandante"]),
+                             mandante_placar = c(input$time_1m,
+                                                 input$time_2m,
+                                                 input$time_3m,
+                                                 input$time_4m,
+                                                 input$time_5m,
+                                                 input$time_6m,
+                                                 input$time_7m,
+                                                 input$time_8m,
+                                                 input$time_9m,
+                                                 input$time_10m),
+                             visitante_placar = c(input$time_1v,
+                                                  input$time_2v,
+                                                  input$time_3v,
+                                                  input$time_4v,
+                                                  input$time_5v,
+                                                  input$time_6v,
+                                                  input$time_7v,
+                                                  input$time_8v,
+                                                  input$time_9v,
+                                                  input$time_10v),
+                             visitante = c(jogos[jogos$Rodada==input$rodada_br_esc,][1,"visitante"],
+                                           jogos[jogos$Rodada==input$rodada_br_esc,][2,"visitante"],
+                                           jogos[jogos$Rodada==input$rodada_br_esc,][3,"visitante"],
+                                           jogos[jogos$Rodada==input$rodada_br_esc,][4,"visitante"],
+                                           jogos[jogos$Rodada==input$rodada_br_esc,][5,"visitante"],
+                                           jogos[jogos$Rodada==input$rodada_br_esc,][6,"visitante"],
+                                           jogos[jogos$Rodada==input$rodada_br_esc,][7,"visitante"],
+                                           jogos[jogos$Rodada==input$rodada_br_esc,][8,"visitante"],
+                                           jogos[jogos$Rodada==input$rodada_br_esc,][9,"visitante"],
+                                           jogos[jogos$Rodada==input$rodada_br_esc,][10,"visitante"])))
+      
+      text_msg <- gm_mime() %>%
+        gm_to("bolao.brasileirao.ie@gmail.com") %>%
+        gm_from("bolao.brasileirao.ie@gmail.com") %>%
+        gm_text_body(msg) %>%
+        gm_subject(paste0(credentials[which(credentials$username_id == input$userName), 'nome'],' - Rodada ', input$rodada_br_esc))
+      
+      gm_send_message(text_msg)
+      
+      shinyjs::toggle(id = "enviado", anim = TRUE, time = 1, animType = "fade")
+      shinyjs::delay(3000, shinyjs::toggle(id = "enviado", anim = TRUE, time = 1, animType = "fade"))
+      
+      
+    })
+  }
+})
+
+}
+
+# Run the application -------------------------------------
+shinyApp(ui = ui, server = server, options = list('test.mode'))
+# runApp(list(ui = ui, server = server), launch.browser = TRUE)
+

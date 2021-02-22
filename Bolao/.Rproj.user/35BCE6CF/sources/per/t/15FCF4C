@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1598819838747.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3281520088",
+    "id" : "15FCF4C",
+    "lastKnownWriteTime" : 1599229949,
+    "last_content_update" : 1599229949781,
+    "path" : "C:/Users/Marcos Cambrainha/Desktop/Marcos Paulo/Bolão BR/Shiny/Bolao/Bolao/upload.R",
+    "project_path" : "upload.R",
+    "properties" : {
+        "cursorPosition" : "4,26",
+        "scrollLine" : "0",
+        "tempName" : "Untitled1"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 8,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

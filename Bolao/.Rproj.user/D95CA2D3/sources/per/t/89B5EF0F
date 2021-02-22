@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1614012263583.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "45874785",
+    "id" : "89B5EF0F",
+    "lastKnownWriteTime" : 1614027865,
+    "last_content_update" : 1614027865652,
+    "path" : "D:/Users/Marcos Cambrainha/Desktop/Marcos Paulo/Bolão BR/Shiny/Bolao/Bolao/graficos.R",
+    "project_path" : "graficos.R",
+    "properties" : {
+        "cursorPosition" : "3,0",
+        "scrollLine" : "0"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

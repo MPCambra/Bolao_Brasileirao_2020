@@ -1,0 +1,27 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1604279724423.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2781142054",
+    "id" : "D79D403D",
+    "lastKnownWriteTime" : 1604692584,
+    "last_content_update" : 1604692584756,
+    "path" : "C:/Users/Marcos Cambrainha/Desktop/Marcos Paulo/Bolão BR/Shiny/Bolao/Bolao/classificacao.R",
+    "project_path" : "classificacao.R",
+    "properties" : {
+        "cursorPosition" : "639,134",
+        "docOutlineVisible" : "1",
+        "scrollLine" : "0",
+        "tempName" : "Untitled2"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 6,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

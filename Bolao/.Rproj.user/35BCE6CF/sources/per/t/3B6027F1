@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1602951023166.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2120228350",
+    "id" : "3B6027F1",
+    "lastKnownWriteTime" : 1603668160,
+    "last_content_update" : 1603668160758,
+    "path" : "C:/Users/Marcos Cambrainha/Desktop/Marcos Paulo/Bolão BR/Shiny/Bolao/Bolao/comp_palp.R",
+    "project_path" : "comp_palp.R",
+    "properties" : {
+        "cursorPosition" : "64,39",
+        "scrollLine" : "0",
+        "tempName" : "Untitled2"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 8,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

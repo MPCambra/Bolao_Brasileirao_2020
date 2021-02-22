@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1595352198701.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "372|31|383|0|\n383|8|408|0|\n805|11|869|2|\n809|29|811|4|\n811|12|868|4|\n813|15|867|6|\n905|9|969|0|\n909|32|911|2|\n913|13|967|4|\n",
+    "hash" : "368004050",
+    "id" : "C170B7EF",
+    "lastKnownWriteTime" : 1604692610,
+    "last_content_update" : 1604692610705,
+    "path" : "C:/Users/Marcos Cambrainha/Desktop/Marcos Paulo/Bolão BR/Shiny/Bolao/Bolao/app.R",
+    "project_path" : "app.R",
+    "properties" : {
+        "cursorPosition" : "891,95",
+        "docOutlineVisible" : "1",
+        "scrollLine" : "0"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

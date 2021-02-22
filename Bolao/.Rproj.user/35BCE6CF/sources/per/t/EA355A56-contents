@@ -1,0 +1,250 @@
+rm(list=ls())
+
+library(gmailr)
+library(readxl)
+library(lubridate)
+
+# Setup para envio de e-mail
+gm_auth_configure(key = "324060675307-l9emjplcbti55k4rt9r0cp8olt9eao73.apps.googleusercontent.com",
+                  secret = "Zz8Vf2V-0EOVwZIv2O7qyovU")
+
+options(
+  gargle_oauth_cache = ".secret",
+  gargle_oauth_email = "bolao.brasileirao.ie@gmail.com"
+)
+gm_auth(email = "bolao.brasileirao.ie@gmail.com")
+
+
+# Recebimento dos e-mails -------------------------------------------------
+
+# Brasileirão -------------------------------------------------------------
+
+# x <- read_xlsx(path = './insumos/jogos_lixo.xlsx', col_names = F) %>%
+#   rename(jogos = 1)  %>%
+#   filter(!str_detect(jogos, 'Rodada')) %>%
+#   pull()
+#   
+# marcados <- which(x=='-')
+# 
+# data <- x[marcados-2]
+# mandante <- x[marcados-1]
+# visitante <- x[marcados+1]
+# 
+# jogos <- tibble(Rodada = rep(c(1:38), each = 10),
+#                 data,
+#                 mandante,
+#                 visitante) %>%
+#   mutate(dia = substr(data, 1,2),
+#          mes = substr(data, 4,5),
+#          hora = substr(data, 8,12),
+#          data = case_when(as.numeric(mes) >= 8 ~ paste0('2020-',
+#                                                         mes,
+#                                                         '-',
+#                                                         dia,
+#                                                         ' ',
+#                                                         hora,
+#                                                         ' -3'),
+#                           TRUE ~ paste0('2021-',
+#                                         mes,
+#                                         '-',
+#                                         dia,
+#                                         ' ',
+#                                         hora,
+#                                         ' -3')),
+#          data = as.POSIXct(data))
+# 
+# jogos%>%
+#   group_by(Rodada) %>%
+#   summarise(start = min(data),
+#             end = max(data)+120*60) %>%
+#   right_join(jogos, by = 'Rodada') %>%
+#   saveRDS('./insumos/jogos.RDS')
+
+# Bolão -------------------------------------------------------------------
+# read_xlsx(path = './insumos/confrontos_bolao.xlsx', col_names = F) %>%
+#   rename(jogos = 1)  %>%
+#   filter(!str_detect(jogos, 'Rodada|TURNO')) %>%
+#   mutate(rodada = rep(c(1:26), each = 7)) %>%
+#   separate(jogos, c('jogador_a', 'jogador_b'), ' x ') %>%
+#   select(rodada,
+#          everything()) %>%
+#   saveRDS('./insumos/confrontos.RDS')
+
+jogos[47,"data"]<- as.POSIXct('2020-08-23 16:00:00')
+jogos[42,"data"]<- as.POSIXct('2020-08-26 21:30:00')
+
+jogos %>%
+  mutate(dia = lubridate::day(data),
+         mes = lubridate::month(data),
+         hora = format(data, "%H:%M")) %>%
+  group_by(Rodada) %>%
+  mutate(start = min(data),
+         end = max(data)+120*60) %>%
+  ungroup() %>%
+  mutate(dia_semana = str_to_title(weekdays(data))) %>%
+  saveRDS('./insumos/jogos.RDS')
+  
+
+# Detectar rodada ---------------------------------------------------------
+jogos <- readRDS('./insumos/jogos.RDS')
+confrontos <- readRDS('./insumos/confrontos.RDS')
+rodada_atual <- min(jogos[jogos$data > Sys.time()-10800, 'Rodada'])
+
+jogos_atual <- jogos[jogos$Rodada==rodada_atual,]
+
+
+gm_threads(paste0('Rodada ', rodada_atual)) %>%
+  gm_id() %>%
+  map(.,gm_thread) %>%
+  lapply(., function(x){.[[1]]$messages}) %>%
+  Reduce(f=append) %>%
+  Reduce(f=append) -> x
+
+x[[1]]$messages %>% str()
+append(x[[1]]$messages,x[[2]]$messages)
+
+confrontos %>%
+  mutate_at(vars(contains('jogador')), ~ifelse(.=='Bernardo', 'B.o', .)) %>%
+  mutate_at(vars(contains('jogador')), ~ifelse(.=='Victão', 'Bernardo', .)) %>%
+  saveRDS('./insumos/confrontos.RDS')
+
+
+confrontos %>%
+  mutate_at(vars(contains('jogador')), ~ifelse(.=='Victão', 'Bernardo', .)) %>%
+  saveRDS('./insumos/confrontos.RDS')
+
+
+confrontos %>%
+  mutate(rodada_bolao = rodada,
+         rodada = rodada+1) %>%
+  saveRDS('./insumos/confrontos.RDS')
+
+
+# Atualização horario dos jogos -------------------------------------------
+cbf <- data.frame(mandante = NA,
+                  visitante = NA,
+                  data = NA,
+                  hora = NA)
+cbf <- cbf[-1,]
+i<-1
+for (i in i:380){
+  link <- paste0('https://www.cbf.com.br/futebol-brasileiro/competicoes/campeonato-brasileiro-serie-a/2020/',i,'?ref=linha')
+  
+    cbf[i,]<- tibble(mandante = link %>%
+           read_html() %>%
+           html_node(xpath = '//*[@id="menu-panel"]/article/section[1]/div/div/div/div/div/div[1]/h3') %>%
+           html_text(),
+         visitante = link %>%
+           read_html() %>%
+           html_node(xpath = '//*[@id="menu-panel"]/article/section[1]/div/div/div/div/div/div[5]/h3') %>%
+           html_text(),
+         data = link %>%
+           read_html() %>%
+           html_node(xpath = '//*[@id="menu-panel"]/article/section[1]/div/div/div/header/div/div[1]/span[2]') %>%
+           html_text(),
+         hora = link %>%
+           read_html() %>%
+           html_node(xpath = '//*[@id="menu-panel"]/article/section[1]/div/div/div/header/div/div[1]/span[3]') %>%
+           html_text())
+    
+    print(paste0('Linha ',i,' pronta.'))
+}
+
+cbf <- cbf %>%
+  mutate_all(trimws) %>%
+  separate('data', c('dia', 'data'), ', ') %>%
+  separate('data', c('dia', 'x1', 'mes', 'x2', 'ano'), ' ') %>%
+  select(-x1,
+         -x2) %>%
+  mutate(mes = case_when(mes == 'Janeiro' ~ 'January',
+                         mes == 'Fevereiro' ~ 'February',
+                         mes == 'Março' ~ 'March',
+                         mes == 'Abril' ~ 'Abril',
+                         mes == 'Maio' ~ 'May',
+                         mes == 'Junho' ~ 'June',
+                         mes == 'Julho' ~ 'July',
+                         mes == 'Agosto' ~ 'August',
+                         mes == 'Setembro' ~ 'September',
+                         mes == 'Outubro' ~ 'October',
+                         mes == 'Novembro' ~ 'November',
+                         mes == 'Dezembro' ~ 'December'),
+         mes = match(mes, month.name),
+         data = paste(ano, mes, dia, sep = '-'),
+         data = paste(data, hora),
+         data = case_when(str_detect(data, 'NA') ~ NA_character_,
+                          TRUE ~ data),
+         data = as.POSIXct(data)) %>%
+  mutate_at(vars(c('mandante', 'visitante')),
+            ~case_when(. == 'Flamengo - RJ' ~ 'Flamengo',
+                       . == 'Botafogo - RJ' ~ 'Botafogo',
+                       . == 'Palmeiras - SP' ~ 'Palmeiras',
+                       . == 'Santos - SP' ~ 'Santos',
+                       . == 'Corinthians - SP' ~ 'Corinthians',
+                       . == 'Grêmio - RS' ~ 'Grêmio',
+                       . == 'Sport - PE' ~ 'Sport Recife',
+                       . == 'Coritiba - PR' ~ 'Coritiba',
+                       . == 'Fortaleza - CE' ~ 'Fortaleza',
+                       . == 'Goiás - GO' ~ 'Goiás',
+                       . == 'Fluminense - RJ' ~ 'Fluminense',
+                       . == 'Vasco da Gama - RJ' ~ 'Vasco',
+                       . == 'São Paulo - SP' ~ 'São Paulo',
+                       . == "Red Bull Bragantino - SP" ~ "RB Bragantino",
+                       . == "Atlético - MG" ~ "Atlético-MG",
+                       . == "Internacional - RS" ~ 'Internacional',
+                       . == "Bahia - BA" ~ 'Bahia',
+                       . == "Athletico Paranaense - PR" ~ "Athletico-PR",
+                       . == 'Ceará - CE' ~ 'Ceará',
+                       . == "Atlético - GO" ~ 'Atlético-GO',
+                       TRUE ~ .))
+
+cbf %>%
+  mutate(Rodada = rep(1:38,each = 10)) %>%
+  group_by(Rodada) %>%
+  summarise(start = min(data, na.rm = T),
+            end = max(data, na.rm = T)+120*60) %>%
+  right_join(cbf %>%
+               mutate(Rodada = rep(1:38,each = 10)), by = 'Rodada') %>%
+  mutate(valido = 1) %>%
+  saveRDS('./insumos/jogos2.RDS')
+
+# cbf <- readRDS('./insumos/jogos2.RDS')
+
+jogos %>%
+  left_join(cbf %>%
+              mutate(Rodada = rep(1:38,each = 10)) %>%
+              group_by(Rodada) %>%
+              summarise(start = min(data, na.rm = T),
+                        end = max(data, na.rm = T)+120*60) %>%
+              right_join(cbf %>%
+                           mutate(Rodada = rep(1:38,each = 10)), by = 'Rodada') %>%
+              mutate(valido = 1),
+            by = c('mandante', 'visitante')) %>%
+  select(-contains('start'),
+         -contains('end'),
+         -contains('dia'),
+         -contains('mes'),
+         -contains('ano'),
+         -contains('hora')) %>%
+  mutate(Rodada = ifelse(is.na(Rodada.y), Rodada.x, Rodada.y),
+         data = ifelse(is.na(data.y), data.x, data.y)) %>%
+  mutate(data = as.POSIXct(data, origin = "1970-01-01"),
+         ano = year(data),
+         mes = month(data),
+         dia = day(data),
+         dia_semana = str_to_title(weekdays(data)),
+         hora =  paste0(hour(data), ":",
+                        ifelse(minute(data)==0,"00", as.character(minute(data))))) %>%
+  select(-contains('.')) %>%
+  left_join(read_csv('./insumos/jogos_invalidos.csv') %>%
+              mutate(valido = 0), 
+            by = c('mandante', 'visitante')) %>%
+  mutate(valido = ifelse(is.na(valido), 1,0)) %>%
+  left_join(.,   group_by(., Rodada, valido) %>%
+              summarise(start = min(data, na.rm = T),
+                        end = max(data, na.rm = T)+120*60) %>%
+              filter(valido == 1) %>%
+              select(-valido),
+            by = 'Rodada') %>% 
+  saveRDS('./insumos/jogos.RDS')
+
+
